@@ -2,7 +2,7 @@ name: RiskGuardian OpsDemo CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
   build_test_package: # CI (C18) + Packaging (début C19)
