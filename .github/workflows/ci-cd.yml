@@ -1,0 +1,80 @@
+name: RiskGuardian OpsDemo CI/CD
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build_test_package: # CI (C18) + Packaging (début C19)
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.update_version.outputs.NEW_VERSION }} # Exporter la nouvelle version
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 # Nécessaire pour pouvoir commit plus tard
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Build and Run Tests with Maven # C18 validée ici
+      run: mvn -B package --file pom.xml
+
+    - name: Archive JAR artifact # C19 Packaging
+      uses: actions/upload-artifact@v3
+      with:
+        name: opsdemo-service-jar
+        path: target/*.jar
+
+    - name: Simulate Model Update (C13) - Increment Version
+      id: update_version # Donner un ID à l'étape
+      run: |
+        # Lire la version actuelle
+        current_version=$(grep 'model.version=' src/main/resources/application.properties | cut -d'=' -f2)
+        echo "Current version: $current_version"
+        # Extraire le numéro et incrémenter (simpliste: v1.0 -> v1.1)
+        base_version=$(echo $current_version | cut -d'.' -f1)
+        patch_version=$(echo $current_version | cut -d'.' -f2)
+        new_patch=$((patch_version + 1))
+        new_version="${base_version}.${new_patch}"
+        echo "New version: $new_version"
+        # Mettre à jour le fichier
+        sed -i "s/model.version=.*/model.version=$new_version/" src/main/resources/application.properties
+        echo "Updated application.properties"
+        # Exporter la nouvelle version pour le job suivant
+        echo "NEW_VERSION=$new_version" >> $GITHUB_OUTPUT
+
+    - name: Commit version bump # C13 - Commit le changement de config modèle
+      run: |
+        git config --global user.name 'GitHub Actions'
+        git config --global user.email 'actions@github.com'
+        git add src/main/resources/application.properties
+        git commit -m "ci: Bump model version to ${{ steps.update_version.outputs.NEW_VERSION }}" || echo "No changes to commit"
+        git push
+
+  deploy: # CD (C19) + Utilisation config C13
+    needs: build_test_package
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3 # Récupérer le code AVEC la version mise à jour
+
+    - name: Download JAR artifact # Récupère le package C19
+      uses: actions/download-artifact@v3
+      with:
+        name: opsdemo-service-jar
+
+    - name: Show updated model version from properties (C13 used in CD)
+      run: |
+        echo "Code checkout includes the version bumped by previous job:"
+        cat src/main/resources/application.properties | grep model.version
+        echo "Retrieved New Version from previous job: ${{ needs.build_test_package.outputs.new_version }}"
+
+    - name: Simulate Deployment (C19)
+      run: |
+        echo "Simulating deployment of JAR containing model version ${{ needs.build_test_package.outputs.new_version }}..."
+        ls -l *.jar
+        echo "Deployment simulation complete."
+        # Mettre ici les vraies commandes de déploiement si possible/nécessaire
