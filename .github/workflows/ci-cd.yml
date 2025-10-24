@@ -4,6 +4,9 @@ on:
   push:
     branches: [ master ]
 
+permissions:
+  contents: write
+
 jobs:
   build_test_package: # CI (C18) + Packaging (début C19)
     runs-on: ubuntu-latest
